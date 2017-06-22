@@ -32,6 +32,15 @@ When you open up SSMS it will ask for the name of the Database Engine.  This is 
 
 After connecting to SQL Server in SSMS, we need to create a new database named `Campaign`.  Right click on **Databases** and **New Database...** and name it `Campaign`.  After adding, you should see the database appear in SSMS.
 
+### Set the Server to be able to execute external scripts
+
+In SSMS run the following T-SQL statement:
+
+    sp_configure 'external scripts enabled', 1;  
+    RECONFIGURE;
+    
+More on this [here](https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/external-scripts-enabled-server-configuration-option).
+
 ## Test Setup
 
 ## Next Steps
