@@ -1,5 +1,14 @@
 # Getting Started
 
+## Introduction
+
+This example solution uses marketing campaign data to perform in-database analyses.  The server setup is SQL Server 2017 with Python Services (see Setup).  The `Python` folder contains the scripts in Python using the `revoscalepy` package for a remote compute context.  It's a good idea to review the `revoscalepy` docs [here](https://docs.microsoft.com/en-us/sql/advanced-analytics/python/what-is-revoscalepy) for a more detailed introduction and listing of the available methods.
+
+Folder structure:
+
+- `Data/` - the marketing campaign data
+- `Python/` - the Python scripts for data ingress and analysis in a remote compute context
+
 ## Setup
 
 ### Python Services
