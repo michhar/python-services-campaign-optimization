@@ -38,81 +38,97 @@ from config import CONNECTION_STRING, BASE_DIR, LOCAL
 import os
 import pandas as pd
 
-# The following is simple proof of concept and will be 
-#   refactored into functions for release
+def main(overwrite=False):
+    """Imports a csv into SQL Server table and performs linear 
+       regression test.
+       
+       Parameters
+       ----------
 
-####################################################################
-# Set the compute context to SQL SERVER
-####################################################################
+       overwrite : bool
+           Whether or not to overwrite the table.  Set to
+           True if this is a new table.
+       """
 
-# NB: don't need, but would be good to know what this actually does here
-# RxComputeContext(LOCAL, '9.1')
+    ####################################################################
+    # Set the compute context to SQL SERVER
+    ####################################################################
 
-compute_context = RxInSqlServer(
-    connectionString = CONNECTION_STRING,
-    numTasks = 1,
-    autoCleanup = False
-    )
+    # NB: don't need, but would be good to know what this actually does here
+    # RxComputeContext(LOCAL, '9.1')
 
-####################################################################
-# Read in data into a pandas df from a file
-####################################################################
+    compute_context = RxInSqlServer(
+        connectionString = CONNECTION_STRING,
+        numTasks = 1,
+        autoCleanup = False
+        )
 
-# TODO:  look into dask for holding chunks of data for import
-# Create the file path to the csv data
-file_path = os.path.join(BASE_DIR, 'Data')
-campaign_detail_df = pd.read_csv(os.path.join(file_path, 'Campaign_Detail.csv'))
+    if overwrite:
 
-####################################################################
-# Create table in SQL server
-####################################################################
+        ####################################################################
+        # Read in data into a pandas df from a file
+        ####################################################################
 
-print("Creating tables...")
-Campaign_Detail = RxSqlServerData(table = "Campaign_Detail", connectionString = CONNECTION_STRING)
+        # TODO:  look into dask for holding chunks of data for import
+        # Create the file path to the csv data
+        file_path = os.path.join(BASE_DIR, 'Data')
+        campaign_detail_df = pd.read_csv(os.path.join(file_path, 'Campaign_Detail.csv'))
 
-####################################################################
-# Read data into the SQL server table just created
-####################################################################
+        ####################################################################
+        # Create table in SQL server
+        ####################################################################
 
-print("Reading data into tables...")
+        print("Creating tables...")
+        Campaign_Detail = RxSqlServerData(
+            table = "Campaign_Detail", 
+            connectionString = CONNECTION_STRING)
 
-# This is not working unfortunately:
-#help(RxDataSource)
-#data = RxDataSource(open(os.path.join(file_path, 'Campaign_Detail.csv'), 'r'))
+        ####################################################################
+        # Read data into the SQL server table that was just created
+        ####################################################################
 
-# The method rx_import_datasource expects a pandas df or an 
-#   RxDataSource
+        print("Reading data into tables...")
 
-# Right now can only run once because overwrite is not working
-# rx_import_datasource(inData=campaign_detail_df, \
-#     outFile=Campaign_Detail, overwrite=True)
+        # This is not working unfortunately:
+        #help(RxDataSource)
+        #data = RxDataSource(open(os.path.join(file_path, 'Campaign_Detail.csv'), 'r'))
 
-# NB: overwrite param not accepting bool values so this can only be run once righ now!
+        # The method rx_import_datasource expects a pandas df or an 
+        #   RxDataSource
 
-#####################################################################
-# Run a query on table
-#####################################################################
+        # Right now can only run once because overwrite is not working
+        # rx_import_datasource(inData=campaign_detail_df, \
+        #     outFile=Campaign_Detail, overwrite=True)
 
-data_source = RxSqlServerData(
-    sqlQuery = "SELECT * FROM Campaign_Detail", 
-    connectionString = CONNECTION_STRING,
-    colInfo = { # NB: may want to add all cols here
-        "Call_For_Action" : { "type" : "integer" }, 
-        "Tenure_Of_Campaign" : { "type" : "integer" }
-    })
+        # NB: overwrite param not accepting bool values so this can only be run once righ now!
 
-# Import data RxImport style from new query source to avoid factor levels       
-data = rx_import_datasource(data_source)
-print(data)
+    #####################################################################
+    # Run a query on table
+    #####################################################################
 
-#####################################################################
-# Run linmod
-#####################################################################
+    data_source = RxSqlServerData(
+        sqlQuery = "SELECT * FROM Campaign_Detail", 
+        connectionString = CONNECTION_STRING,
+        colInfo = { # NB: may want to add all cols here
+            "Call_For_Action" : { "type" : "integer" }, 
+            "Tenure_Of_Campaign" : { "type" : "integer" }
+        })
 
-# NB:  not working due to ""'sp_execute_external_script' is disabled on this instance of SQL Server"
-#   error even though it has been set to 1 in SSMS
+    # Import data RxImport style from new query source to avoid factor levels       
+    data = rx_import_datasource(data_source)
+    print(data)
 
-linmod = rx_lin_mod_ex("Call_For_Action ~ Tenure_Of_Campaign", data = data, compute_context = compute_context)
-assert linmod is not None
-assert linmod._results is not None
-print(linmod)
+    #####################################################################
+    # Run linmod
+    #####################################################################
+
+    # NB:  not working due to ""'sp_execute_external_script' is disabled on this instance of SQL Server"
+    #   error even though it has been set to 1 in SSMS
+
+    linmod = rx_lin_mod_ex("Call_For_Action ~ Tenure_Of_Campaign", data = data, compute_context = compute_context)
+    assert linmod is not None
+    assert linmod._results is not None
+    print(linmod)
+
+if __name__ == '__main__':
+    main()
