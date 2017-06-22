@@ -16,13 +16,21 @@ The **Python Services** should be installed into a folder that looks like:
 
 ### Programming Environment
 
-It's recommended to use **Visual Studio 2015 or 2017** (Community Edition is fine).
+It's recommended to use **Visual Studio Code**, but any IDE or code editor should be fine (it's always good to have some form of Python extensions in the code editor however).
 
 New project.
 
 Open repo folder.
 
-Right click on **Python Environments**.  Click **Add/Remove Python Environments...** and follow the instructions [here](https://docs.microsoft.com/en-us/visualstudio/python/python-environments#creating-an-environment-for-an-existing-interpreter).  (This process may take some time)
+> If using **Visual Studio 2015/2017** you'll need to additionally do the following:  Right click on **Python Environments**.  Click **Add/Remove Python Environments...** and follow the instructions [here](https://docs.microsoft.com/en-us/visualstudio/python/python-environments#creating-an-environment-for-an-existing-interpreter).  (This process may take some time)
+
+### Add the Database to your instance of SQL Server 2017
+
+You'll need to add a database for this example called `Campaign` to the SQL Server instance and the way we recommend here is with SQL Server Management Studio (SSMS) version 17.X (17.X is the version compatible with this SQL Server version).  Download it [here](https://docs.microsoft.com/en-us/sql/ssms/download-sql-server-management-studio-ssms) if you don't already have this version.
+
+When you open up SSMS it will ask for the name of the Database Engine.  This is simply your computer's name, backslash, your instance name if you named it, e.g., `MININT1234\SQLSERVER2017`.  More detailed instructions can be found [here](https://docs.microsoft.com/en-us/sql/ssms/download-sql-server-management-studio-ssms).
+
+After connecting to SQL Server in SSMS, we need to create a new database named `Campaign`.  Right click on **Databases** and **New Database...** and name it `Campaign`.  After adding, you should see the database appear in SSMS.
 
 ## Test Setup
 
