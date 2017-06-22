@@ -30,20 +30,29 @@ from revoscalepy.etl.RxImport import rx_import_datasource
 # from revoscalepy.etl.RxImport import RxDataSource
 from revoscalepy.functions.RxDataStep import rx_data_step_ex
 from revoscalepy.functions.RxLinMod import rx_lin_mod_ex
+from revoscalepy.functions.RxLogit import rx_logit_ex
 from revoscalepy.functions.RxPredict import rx_predict_ex
 from revoscalepy.functions.RxSummary import rx_summary
 from revoscalepy.utils.RxOptions import RxOptions
+from sklearn.linear_model import LinearRegression
 
 from config import CONNECTION_STRING, BASE_DIR, LOCAL
 import os
 import pandas as pd
+from pprint import pprint
 
-def main(overwrite=False):
+def main(tablename, csvfile, overwrite=False):
     """Imports a csv into SQL Server table and performs linear 
        regression test.
        
        Parameters
        ----------
+
+       tablename : str
+           The new or previosly create table name in database.
+
+       csvfile : str
+           The csv file with data for import (full path).
 
        overwrite : bool
            Whether or not to overwrite the table.  Set to
@@ -71,16 +80,15 @@ def main(overwrite=False):
 
         # TODO:  look into dask for holding chunks of data for import
         # Create the file path to the csv data
-        file_path = os.path.join(BASE_DIR, 'Data')
-        campaign_detail_df = pd.read_csv(os.path.join(file_path, 'Campaign_Detail.csv'))
+        input_df = pd.read_csv(csvfile)
 
         ####################################################################
         # Create table in SQL server
         ####################################################################
 
         print("Creating tables...")
-        Campaign_Detail = RxSqlServerData(
-            table = "Campaign_Detail", 
+        outfile = RxSqlServerData(
+            table = tablename, 
             connectionString = CONNECTION_STRING)
 
         ####################################################################
@@ -96,6 +104,9 @@ def main(overwrite=False):
         # The method rx_import_datasource expects a pandas df or an 
         #   RxDataSource
 
+        rx_import_datasource(inData=input_df, \
+            outFile=outfile)
+
         # Right now can only run once because overwrite is not working
         # rx_import_datasource(inData=campaign_detail_df, \
         #     outFile=Campaign_Detail, overwrite=True)
@@ -103,32 +114,98 @@ def main(overwrite=False):
         # NB: overwrite param not accepting bool values so this can only be run once righ now!
 
     #####################################################################
-    # Run a query on table
+    # Set up a query on table for train and test data (and ensure factor levels)
     #####################################################################
 
-    data_source = RxSqlServerData(
-        sqlQuery = "SELECT * FROM Campaign_Detail", 
+    # Train data
+    data_source_train = RxSqlServerData(
+        sqlQuery = "SELECT TOP 10000 * FROM Lead_Demography_Tbl ORDER BY Lead_Id", 
         connectionString = CONNECTION_STRING,
         colInfo = { # NB: may want to add all cols here
-            "Call_For_Action" : { "type" : "integer" }, 
-            "Tenure_Of_Campaign" : { "type" : "integer" }
-        })
+            "No_Of_Children" : { "type" : "integer" },
+            "Household_Size" : { "type" : "integer" },
+            "No_Of_Dependents" : { "type" : "integer" },
+            "Highest_Education" : { 
+                "type" : "factor",
+            #     "levels" : [
+            #         "High School",
+            #         "College",
+            #         "Attended Vocational",
+            #         "Graduate School"
+            #         ]
+                },
+            "Annual_Income_Bucket" : { 
+                "type" : "factor",
+                # "levels" : [ 
+                #     "60k-120k",
+                #     ">120k",
+                #     "<60k"
+                #     ]
+                }
+            }
+        )
 
-    # Import data RxImport style from new query source to avoid factor levels       
-    data = rx_import_datasource(data_source)
-    print(data)
+    # Import training data RxImport style from new query source       
+    X_y_train = rx_import_datasource(data_source_train)
+    print(X_y_train)
+
+    # Test data (let's pick ~30% size of training dataset)
+    data_source_test = RxSqlServerData(
+        sqlQuery = "SELECT * FROM Lead_Demography_Tbl ORDER BY Lead_Id OFFSET 10000 ROWS FETCH FIRST 3000 ROW ONLY", 
+        connectionString = CONNECTION_STRING,
+        colInfo = { # NB: may want to add all cols here
+            "No_Of_Children" : { "type" : "integer" },
+            "Household_Size" : { "type" : "integer" },
+            "No_Of_Dependents" : { "type" : "integer" },
+            "Highest_Education" : { 
+                "type" : "factor",
+                # "levels" : [
+                #     "",
+                #     "High School",
+                #     "College",
+                #     "Attended Vocational",
+                #     "Graduate School"
+                #     ]
+                },
+            "Annual_Income_Bucket" : { 
+                "type" : "factor",
+                # "levels" : [ 
+                #     "60k-120k",
+                #     ">120k",
+                #     "<60k"
+                #     ]
+                }
+            }
+        )
+
+    # Import data RxImport style from new query source       
+    X_y_test = rx_import_datasource(data_source_test)
 
     #####################################################################
-    # Run linmod
+    # Run revoscalepy linear regression and summary (in-database)
     #####################################################################
 
-    # NB:  not working due to ""'sp_execute_external_script' is disabled on this instance of SQL Server"
-    #   error even though it has been set to 1 in SSMS
+    mod = rx_lin_mod_ex(formula="No_Of_Children ~ F(Annual_Income_Bucket)+F(Highest_Education)", 
+        data=X_y_train, compute_context=compute_context)
+    assert mod is not None
+    assert mod._results is not None
+    pprint(mod._results)
+    summary = rx_summary(formula="No_Of_Children ~ F(Annual_Income_Bucket)+F(Highest_Education)", 
+        data=X_y_train, compute_context=compute_context)
+    # print(summary) # NB: Doesn't want to print
+    
+    # pprint(vars(mod))
 
-    linmod = rx_lin_mod_ex("Call_For_Action ~ Tenure_Of_Campaign", data = data, compute_context = compute_context)
-    assert linmod is not None
-    assert linmod._results is not None
-    print(linmod)
+    #####################################################################
+    # Run scikit-learn linear regression (in-memory)
+    #####################################################################
+
+    df_train = pd.DataFrame(X_y_train)
+    df_test = pd.DataFrame(X_y_test)
 
 if __name__ == '__main__':
-    main()
+
+    file_path = os.path.join(BASE_DIR, 'Data')
+    inputfile = os.path.join(file_path, "Lead_Demography.csv")
+
+    main(tablename="Lead_Demography_Tbl", csvfile=inputfile, overwrite=False)

@@ -16,5 +16,5 @@ SQLSERVER_NAME = os.getenv('SQLSERVER_NAME', '<computername>\<sql server instanc
 
 CONNECTION_STRING = "Driver=SQL Server;Server=" + SQLSERVER_NAME + \
     ";Database=Campaign;Trusted_Connection=Yes"
-BASE_DIR = "c:\\users\\michhar\\documents\\visual studio 2015\\Projects\\python-server-campaign-optimization\\python-server-campaign-optimization"
+BASE_DIR = os.getcwd() + os.path.sep + ".."
 LOCAL = RxLocalSeq()
