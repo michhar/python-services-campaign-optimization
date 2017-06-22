@@ -8,10 +8,13 @@
 ##       If you will be using the Python IDE scripts from scratch,  first go to SSMS 
 ##       and create a New Database with the name you wish to use.
 ##########################################################################################################################################
+from revoscalepy.computecontext.RxLocalSeq import RxLocalSeq
 import os
 
-SQLSERVER_NAME = os.getenv('SQLSERVER_NAME', 'localhost')
+# Use the environment variable SQLSERVER_NAME or fill in your info here
+SQLSERVER_NAME = os.getenv('SQLSERVER_NAME', '<computername>\<sql server instance name>')
 
 CONNECTION_STRING = "Driver=SQL Server;Server=" + SQLSERVER_NAME + \
     ";Database=Campaign;Trusted_Connection=Yes"
 BASE_DIR = "c:\\users\\michhar\\documents\\visual studio 2015\\Projects\\python-server-campaign-optimization\\python-server-campaign-optimization"
+LOCAL = RxLocalSeq()
