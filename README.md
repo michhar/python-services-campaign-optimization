@@ -43,12 +43,17 @@ After connecting to SQL Server in SSMS, we need to create a new database named `
 
 ### Set the Server to be able to execute external scripts
 
-In SSMS run the following T-SQL statement:
+After running SQL Server setup perform the following steps:
+* Enable the external script execution feature by in SSMS runing the following T-SQL statement:
 
     sp_configure 'external scripts enabled', 1;  
     RECONFIGURE;
-    
-More on this [here](https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/external-scripts-enabled-server-configuration-option).
+
+* Restart the server
+* Ensure that the service that calls the external runtime has necessary permissions
+* Ensure that your SQL login or Windows user account has necessary permissions to connect to the server, to read data, and to create any database objects required by the sample
+
+More on this [here](https://docs.microsoft.com/en-us/sql/database-engine/configure-windows/external-scripts-enabled-server-configuration-option) and [here](https://docs.microsoft.com/en-us/sql/advanced-analytics/tutorials/machine-learning-services-tutorials).
 
 ## Test Setup
 
