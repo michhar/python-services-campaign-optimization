@@ -29,10 +29,14 @@ Micheleen Harris
 """
 
 from revoscalepy.computecontext.RxComputeContext import  RxComputeContext
-from revoscalepy.computecontext.RxInSqlServer import RxSqlServerData, RxInSqlServer
+from revoscalepy.computecontext.RxInSqlServer import RxSqlServerData
+from revoscalepy.computecontext.RxInSqlServer import RxInSqlServer
+from revoscalepy.computecontext.RxInSqlServer import RxOdbcData
 from revoscalepy.etl.RxImport import rx_import_datasource
+from revoscalepy.datasource.RxXdfData import RxXdfData
+from revoscalepy.datasource.RxFileData import RxFileData
 # from revoscalepy.etl.RxImport import RxDataSource
-# from revoscalepy.functions.RxDataStep import rx_data_step_ex
+from revoscalepy.functions.RxDataStep import rx_data_step_ex
 from revoscalepy.functions.RxLinMod import rx_lin_mod_ex
 # from revoscalepy.functions.RxLogit import rx_logit_ex
 from revoscalepy.functions.RxPredict import rx_predict_ex
@@ -144,7 +148,7 @@ def main(tablename, inputdf, overwrite=False):
     X_y_test = rx_import_datasource(data_source_test)
 
     #####################################################################
-    # Run revoscalepy linear regression and summary (in-database)
+    # Run revoscalepy linear regression and summary on training data (in-database)
     #####################################################################
 
     mod = rx_lin_mod_ex(formula="No_Of_Children ~ \
@@ -168,31 +172,87 @@ def main(tablename, inputdf, overwrite=False):
     df_test = pd.DataFrame(X_y_test)
 
 if __name__ == '__main__':
-
+    
+    import dask.dataframe as dd
 
     ####################################################################
     # Read in data into a pandas df from a file (do here for manipulation)
     ####################################################################
 
     file_path = os.path.join(BASE_DIR, 'Data')
-    inputfile = os.path.join(file_path, "Lead_Demography.csv")
+    # Note: converted the 'Lead_Id' column to integer by removing chars
+    inputfile = os.path.join(file_path, "Lead_Demography_withID.csv")
+    # inputfile = os.path.join(file_path, "Lead_Demography.csv")
 
-    # TODO:  look into dask for holding chunks of data for import
-    # Create the file path to the csv data
+    # Create the file path to the csv data (could use dask to do some 
+    #   preprocessing - see "Dask way")
     input_df = pd.read_csv(inputfile)
 
     ####################################################################
-    # Dummy encode variables of interest
+    # Dask way
     ####################################################################
 
-    df_dummy = pd.get_dummies(input_df, 
-        columns=['Annual_Income_Bucket', 'Highest_Education'])
+    # Read a csv file into a dask dataframe (data chunked on disk)
+    # input_df = dd.read_csv(inputfile, dtype={'Annual_Income_Bucket' : 'category',
+    #     'Highest_Education' : 'category'})
+
+    # df_dummy = dd.get_dummies(input_df.categorize(), 
+    # columns=['Annual_Income_Bucket', 'Highest_Education']).persist()
+
+    # dummyfile = os.path.join(file_path, "Lead_Demography_dummied.csv")
+
+    # df_dummy.to_csv(dummyfile)
+    # print(dummyfile)
+
+    ####################################################################
+    # Dummy encode variables of interest with pandas
+    ####################################################################
+
+    # df_dummy = pd.get_dummies(input_df, 
+    #     columns=['Annual_Income_Bucket', 'Highest_Education'])
 
     # Fix column names
-    new_cols = [x.replace(' ', '_').replace('>', 'gt').replace('<', 'lt') 
-        for x in df_dummy.columns]
-    print(new_cols)
-    df_dummy.columns = new_cols
+    # new_cols = [x.replace(' ', '_').replace('>', 'gt').replace('<', 'lt') 
+    #     for x in df_dummy.columns]
+    # print(new_cols)
+    # df_dummy.columns = new_cols
 
-    main(tablename="Lead_Demography_Tbl", inputdf=df_dummy, 
-        overwrite=True)
+    ####################################################################
+    # Import from file directly to xdf - work in progress
+    ####################################################################
+
+    # def dummy_vars(df):
+    #     df_dummy = pd.get_dummies(df, 
+    #         columns=['Annual_Income_Bucket', 'Highest_Education'])
+    #     return df_dummy
+
+    # def test(data):
+    #     print(type(data))
+    #     return data
+
+    # xdf = RxFileData(file=inputfile, class_name='DataFrame', return_data_frame=True)
+
+    # rx_data_step_ex(input_data=xdf, output_file=xdf, 
+    #                 transform_function=test,
+    #                 overwrite=True)
+
+    # tf = rx_import_datasource(xdf)
+    # # colInfo = { # NB: may want to add all cols here
+    # #         "No_Of_Children" : { "type" : "integer" },
+    # #         "Household_Size" : { "type" : "integer" },
+    # #         "No_Of_Dependents" : { "type" : "integer" }
+    # #         }
+    # #     )
+
+
+    # # rxGetInfo(tf, getVarInfo = TRUE, numRows = 10)
+    # # rxDataStep(tf, tf, transformFunc = makeDummies, overwrite = TRUE)
+    # # rxGetInfo(tf, getVarInfo = TRUE, numRows = 10)
+
+
+    ####################################################################
+    # Call main function to work in SQL compute context
+    ####################################################################
+
+    main(tablename="Lead_Demography_Tbl_WithID", inputdf=input_df, 
+        overwrite=False)
