@@ -148,7 +148,7 @@ def main(tablename, inputdf, overwrite=False):
     X_y_test = rx_import_datasource(data_source_test)
 
     #####################################################################
-    # Run revoscalepy linear regression and summary on training data (in-database)
+    # Run revoscalepy linear regression on training data (in-database)
     #####################################################################
 
     mod = rx_lin_mod_ex(formula="No_Of_Children ~ \
@@ -158,14 +158,21 @@ def main(tablename, inputdf, overwrite=False):
     assert mod is not None
     assert mod._results is not None
     pprint(mod._results)
+
+    #####################################################################
+    # Summary on training data (in-database)
+    #####################################################################
+
+    # Note:  for "data" use data source and not the rximport'ed data
+
     summary = rx_summary(formula="No_Of_Children ~ \
                                 F(Highest_Education_High_School)+\
                                 F(Annual_Income_Bucket_lt60k)", 
-        data=X_y_train, compute_context=compute_context)
-    # print(summary) # NB: Doesn't want to print
+        data=data_source_test, compute_context=compute_context)
+    print(summary)
     
     #####################################################################
-    # Run scikit-learn linear regression (in-memory)
+    # Run scikit-learn linear regression (in-memory) - TODO
     #####################################################################
 
     df_train = pd.DataFrame(X_y_train)
