@@ -1,6 +1,6 @@
 """
 
-Campaign optimization step 1
+Logistic regression analysis on demographic data
 
 Prerequisites:
   - SQL Server 2017 with Python Services installed
@@ -30,37 +30,37 @@ Based on: https://docs.microsoft.com/en-us/sql/advanced-analytics/tutorials/use-
 Micheleen Harris
 """
 
-from revoscalepy.computecontext.RxComputeContext import  RxComputeContext
-from revoscalepy.computecontext.RxInSqlServer import RxSqlServerData
-from revoscalepy.computecontext.RxInSqlServer import RxInSqlServer
-from revoscalepy.computecontext.RxInSqlServer import RxOdbcData
-from revoscalepy.etl.RxImport import rx_import_datasource
-from revoscalepy.datasource.RxXdfData import RxXdfData
-from revoscalepy.datasource.RxFileData import RxFileData
-from revoscalepy.functions.RxDataStep import rx_data_step_ex
-from revoscalepy.functions.RxLinMod import rx_lin_mod_ex
-from revoscalepy.functions.RxLogit import rx_logit_ex
-from revoscalepy.functions.RxPredict import rx_predict_ex
-from revoscalepy.functions.RxSummary import rx_summary
-from sklearn.metrics import mean_squared_error, r2_score, accuracy_score
+from revoscalepy import RxComputeContext
+from revoscalepy import RxSqlServerData
+from revoscalepy import RxInSqlServer
+from revoscalepy import RxOdbcData
+from revoscalepy import rx_import
+from revoscalepy import RxXdfData
+from revoscalepy import RxTextData
+from revoscalepy import rx_data_step
+from revoscalepy import rx_get_info
+from revoscalepy import rx_lin_mod
+from revoscalepy import rx_logit
+from revoscalepy import rx_predict
+from revoscalepy import rx_summary
+from revoscalepy import rx_set_compute_context
+from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import binarize
 from sklearn.linear_model import LinearRegression
-
 from config import CONNECTION_STRING, BASE_DIR
 import os
 import pandas as pd
 import numpy as np
-import dask.dataframe as dd
 from pprint import pprint
 
 
 def main(tablename, inputdf, overwrite=False):
-    """Imports a DataFrame into SQL Server table and, operating
-       in-database, uses linear regression to create a
+    """Imports a data source into SQL Server table and, operating
+       in-database, uses logistic regression to create a
        predictive model.
 
        A comparison to an out-of-database, in memory method
-       is performed.
+       is performed (TODO)
        
        Parameters
        ----------
@@ -68,8 +68,8 @@ def main(tablename, inputdf, overwrite=False):
        tablename : str
            The new or previosly create table name in database.
 
-       inputdf : pandas.DataFrame
-           The DataFrame with data for import.
+       inputdf : RxTextData object
+           The data source
 
        overwrite : bool, optional (default=False)
            Whether or not to overwrite the table.  
@@ -83,80 +83,75 @@ def main(tablename, inputdf, overwrite=False):
     # NB: don't need, but would be good to know what this actually does here
     # RxComputeContext(LOCAL, '9.1')
 
-    compute_context = RxInSqlServer(
-        connectionString = CONNECTION_STRING,
-        numTasks = 1,
-        autoCleanup = False
-        )
+    compute_context = RxInSqlServer(connection_string = CONNECTION_STRING)
+        # ,
+        # num_tasks = 1,
+        # auto_cleanup = False,
+        # console_output=True
+        # )
+    
+    rx_set_compute_context(compute_context)
 
-    if overwrite:
+    # if overwrite:
 
-        ####################################################################
-        # Create table in SQL server
-        ####################################################################
+    ####################################################################
+    # Create table in SQL server
+    ####################################################################
 
-        print("Creating tables...")
-        outfile = RxSqlServerData(
-            table = tablename, 
-            connectionString = CONNECTION_STRING)
+    print("Creating tables...")
+    data_source = RxSqlServerData(
+        table=tablename, 
+        connection_string=CONNECTION_STRING)
 
-        ####################################################################
-        # Read data into the SQL server table that was just created
-        ####################################################################
+    ####################################################################
+    # Read data into the SQL server table that was just created
+    ####################################################################
 
-        print("Reading data into tables...")
+    print("Reading data into tables...")
 
-        rx_import_datasource(inData=inputdf, \
-            outFile=outfile)
-
-        # Right now can only run once because overwrite is not working
-        # rx_import_datasource(inData=inputdf, \
-        #     outFile=outfile, overwrite=True)
-
-        # NB: overwrite param not accepting bool values so this can only be run once righ now!
+    rx_data_step(input_data=inputdf, output_file=data_source, overwrite=True)
 
     #####################################################################
     # Set up a query on table for train and test data (and ensure factor levels)
     #####################################################################
+    print("Setting up query and datasources for train and test sets...")
 
     # Train data
     data_source_train = RxSqlServerData(
-        sqlQuery = "SELECT TOP 10000 * FROM Lead_Demography_Tbl \
+        sql_query="SELECT TOP 10000 * FROM Lead_Demography_Tbl \
                     ORDER BY Lead_Id", 
-        connectionString = CONNECTION_STRING,
-        colInfo = {
-            "No_Of_Children" : { "type" : "integer" },
-            }
+        connection_string=CONNECTION_STRING,
+        verbose=True
         )
 
     # Import training data RxImport style from new query source       
-    X_y_train = rx_import_datasource(data_source_train)
+    X_y_train = rx_import(data_source_train)
+    # X_y_train = rx_data_step(input_data=data_source_train, overwrite=True)
 
+
+    print("Test data...")
     # Test data (let's pick ~30% size of training dataset)
     data_source_test = RxSqlServerData(
-        sqlQuery = "SELECT * FROM Lead_Demography_Tbl \
+        sql_query="SELECT * FROM Lead_Demography_Tbl \
                     ORDER BY Lead_Id \
                     OFFSET 10000 ROWS \
                     FETCH FIRST 3000 ROW ONLY", 
-        connectionString = CONNECTION_STRING,
-        colInfo = {
-            "No_Of_Children" : { "type" : "integer" },
-            "Annual_Income_Bucket_gt120k" : {"typte" : "factor"},
-            "Highest_Education_Graduate_School" : {"typte" : "factor"}
-            }
+        connection_string=CONNECTION_STRING
         )
 
     # Import data RxImport style from new query source       
-    X_y_test = rx_import_datasource(data_source_test)
+    X_y_test = rx_import(data_source_test)
+    # X_y_test = rx_data_step(input_data=data_source_test, overwrite=True)
 
     #####################################################################
-    # Run revoscalepy linear regression on training data (in-database)
+    # Run revoscalepy logistic regression on training data (in-database)
     #####################################################################
 
-    mod = rx_logit_ex(formula="Annual_Income_Bucket_gt120k ~ \
+    print('Fitting a logistic regression model...')
+
+    mod = rx_logit(formula="Annual_Income_Bucket_gt120k ~ \
                                 F(Highest_Education_Graduate_School)", 
         data=X_y_train, compute_context=compute_context, verbose=2)
-        # cov_coef=True)
     assert mod is not None
     assert mod._results is not None
     pprint(mod._results)
@@ -169,8 +164,8 @@ def main(tablename, inputdf, overwrite=False):
 
     print('\nSummary: \n')
 
-    summary = rx_summary("F(Annual_Income_Bucket_gt120k) ~ \
-                                F(Highest_Education_Graduate_School)", 
+    summary = rx_summary("Annual_Income_Bucket_gt120k ~ \
+                                F(Highest_Education_Graduate_School)",
         data=data_source_train, compute_context=compute_context,
         cube=True, verbose=2)
 
@@ -180,7 +175,7 @@ def main(tablename, inputdf, overwrite=False):
 
     print("\nPredict on test: \n")
 
-    pred = rx_predict_ex(mod, data=X_y_test, verbose=2, write_model_vars=True)
+    pred = rx_predict(mod, data=X_y_test, verbose=2, write_model_vars=True)
 
     #####################################################################
     # Metrics for predition based on groundtruth (with scikit-learn tools)
@@ -188,7 +183,8 @@ def main(tablename, inputdf, overwrite=False):
 
     pred_results = pred._results['Annual_Income_Bucket_gt120k_Pred']
     # For some reason the prediction results are not in a binary [0,1] format
-    y_pred = binarize(pred_results, threshold=(min(pred_results) + max(pred_results))/2).reshape(-1, 1)
+    y_pred = binarize(pred_results, threshold=(min(pred_results) + \
+                        max(pred_results))/2).reshape(-1, 1)
     y_true = pred._data['Annual_Income_Bucket_gt120k']
 
     
@@ -198,13 +194,6 @@ def main(tablename, inputdf, overwrite=False):
     print("Accuracy score: ", accuracy_score(
                         y_true=y_true, 
                         y_pred=y_pred))
-
-
-
-    # # NB: If this is regression (rx_lin_mod_ex) can look at metrics like:
-    # print("R^2 (coefficient of determination): ", r2_score(
-    #                     y_true=y_true, 
-    #                     y_pred=y_pred))
     
     
     #####################################################################
@@ -224,78 +213,35 @@ if __name__ == '__main__':
     # Note: converted the 'Lead_Id' column to integer by removing chars
     inputfile = os.path.join(file_path, "Lead_Demography.csv")
 
-    # Create the file path to the csv data (could use dask to do some 
-    #   preprocessing out-of-core - see "Dask way")
-    input_df = pd.read_csv(inputfile)
-
     ####################################################################
-    # Dummy encode variables of interest with pandas
+    # Dummy encode variables of interest with an xdf file as output
     ####################################################################
 
-    df_dummy = pd.get_dummies(input_df, 
-        columns=['Annual_Income_Bucket', 'Highest_Education'])
+    def dummy_vars(df, context):
+        # Dummy vars
+        df_dummy = pd.get_dummies(df, 
+            columns=['Annual_Income_Bucket', 'Highest_Education'])
 
-    # Fix column names
-    new_cols = [x.replace(' ', '_').replace('>', 'gt').replace('<', 'lt') 
-        for x in df_dummy.columns]
-    print(new_cols)
-    df_dummy.columns = new_cols
+        # Rename columns (remove spaces etc.)
+        new_cols = [x.replace(' ', '_').replace('>', 'gt').replace('<', 'lt') 
+                        for x in df_dummy.columns]
+        df_dummy.columns = new_cols
+        return df_dummy
 
-    ####################################################################
-    # Dask way - optional perf speedup and work in progress
-    ####################################################################
+    output_file = os.path.join(file_path, "Lead_Demography.xdf")
 
-    # # Read a csv file into a dask dataframe (data chunked on disk) 
-    # #   - must have numeric id, and dummy variables
+    # Set a csv as a data source
+    data_source = RxTextData(file=inputfile, delimiter=',')
 
-    # input_df = dd.read_csv(inputfile, dtype={'Annual_Income_Bucket' : 'category',
-    #     'Highest_Education' : 'category'})
+    # Dummy variables and output to named xdf
+    rx_data_step(input_data=data_source, output_file=output_file,
+                                overwrite=True, transform_function=dummy_vars)
 
-    # df_dummy = dd.get_dummies(input_df.categorize(), 
-    # columns=['Annual_Income_Bucket', 'Highest_Education']).persist()
-
-    # dummyfile = os.path.join(file_path, "Lead_Demography_dummied.csv")
-
-    # df_dummy.to_csv(dummyfile)
-    # print(dummyfile)
-
-
-    ####################################################################
-    # Import from file directly to xdf - work in progress
-    ####################################################################
-
-    # def dummy_vars(df):
-    #     df_dummy = pd.get_dummies(df, 
-    #         columns=['Annual_Income_Bucket', 'Highest_Education'])
-    #     return df_dummy
-
-    # def test(data):
-    #     print(type(data))
-    #     return data
-
-    # xdf = RxFileData(file=inputfile, class_name='DataFrame', return_data_frame=True)
-
-    # rx_data_step_ex(input_data=xdf, output_file=xdf, 
-    #                 transform_function=test,
-    #                 overwrite=True)
-
-    # tf = rx_import_datasource(xdf)
-    # # colInfo = { # NB: may want to add all cols here
-    # #         "No_Of_Children" : { "type" : "integer" },
-    # #         "Household_Size" : { "type" : "integer" },
-    # #         "No_Of_Dependents" : { "type" : "integer" }
-    # #         }
-    # #     )
-
-    # # Wish to implement these revoscaler functions for revoscalepy:
-    # # rxGetInfo(tf, getVarInfo = TRUE, numRows = 10)
-    # # rxDataStep(tf, tf, transformFunc = makeDummies, overwrite = TRUE)
-    # # rxGetInfo(tf, getVarInfo = TRUE, numRows = 10)
-
+    rx_get_info(data=output_file, verbose=2)
 
     ####################################################################
     # Call main function to work in SQL compute context
     ####################################################################
 
-    main(tablename="Lead_Demography_Tbl", inputdf=input_df, 
-        overwrite=False)
+    main(tablename="Lead_Demography_Tbl", inputdf=output_file, 
+            overwrite=True)
